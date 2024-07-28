@@ -1,0 +1,78 @@
+# Folders
+__pycache__*
+.vscode*
+**/Figures/*
+**/CSV/*
+*_files/*
+**/Data/*
+**/Drops/*
+Archive/*
+**/*logs*/*
+**/catboost_*/*
+**/TensorBoardLog/*
+**/DetectShips/*
+
+# Archives
+*.7z
+*.zip
+
+# Media Files
+*.avi
+*.mp4
+
+# Documents
+*.docx
+*.doc
+*.html
+*.ppt
+*.pptx
+*.pdf
+*.xls
+*.xlsx
+
+# MATLAB Compiler / Coder
+*App/
+*.prj
+*.fig
+
+# MATLAB Files
+*.asv
+*.m~
+*.mat
+*.mex*
+
+# Python
+*.ckpt
+*.db
+*.pck
+*.pcl
+*.pkl
+*.pickle
+*.pth
+.ipynb_checkpoints*
+*.npz
+*.npy
+*TMP*.ipynb
+*TMP*.py
+*TEMP*.ipynb
+*TEMP*.py
+
+# Miscellaneous 
+Report*.html
+KaggleWhatsCooking.json
+IMDBReviews*.*
+
+# TensorBoard
+*tfevents*
+
+
+*runs/*
+*.pyc
+*.pt
+*.vscode
+*runs
+*.model
+_build
+_build/*
+*Video*.png
+*.pt
