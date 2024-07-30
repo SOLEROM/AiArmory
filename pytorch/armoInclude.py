@@ -1,3 +1,17 @@
+# Python STD
+import os
+from enum import auto, Enum, unique
+import math
+import time
+import copy
+import random
+import time
+# OOP
+from abc import ABC, abstractmethod
+
+from enum import auto, Enum, unique
+from platform import python_version
+
 # General Tools
 import numpy as np
 import scipy as sp
@@ -33,15 +47,6 @@ import torchinfo
 # Improve performance by benchmarking
 torch.backends.cudnn.benchmark = True
 
-# Miscellaneous
-import copy
-from enum import auto, Enum, unique
-import math
-import os
-from platform import python_version
-import random
-import time
-
 # Typing
 from typing import Callable, Dict, Generator, List, Optional, Self, Set, Tuple, Union
 
@@ -56,3 +61,6 @@ from IPython.display import HTML, Image
 from IPython.display import display
 from ipywidgets import Dropdown, FloatSlider, interact, IntSlider, Layout, SelectionSlider
 from ipywidgets import interact
+
+# Course Packages
+from DeepLearningBlocks import NNMode

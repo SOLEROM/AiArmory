@@ -1,42 +1,5 @@
-
-# Python STD
-import os
-from enum import auto, Enum, unique
-import math
-import time
-# OOP
+from armoInclude import * 
 from abc import ABC, abstractmethod
-
-# Data
-import numpy as np
-import scipy as sp
-# Machine Learning
-
-# Deep Learning
-import  torch
-import  torch.nn            as nn
-import  torch.nn.functional as F
-from    torch.optim.optimizer import Optimizer
-from    torch.optim.lr_scheduler import LRScheduler
-from    torch.utils.data import DataLoader, Dataset
-from    torch.utils.data import default_collate
-from    torch.utils.tensorboard import SummaryWriter
-import  torchvision
-from    torchvision.datasets.folder import IMG_EXTENSIONS, pil_loader
-# Image Processing / Computer Vision
-
-# Optimization
-
-# Auxiliary
-
-# Visualization
-import matplotlib.pyplot as plt
-
-# Course Packages
-from DeepLearningBlocks import NNMode
-
-# Typing
-from typing import Any, Callable, Dict, Generator, List, Optional, Self, Set, Tuple, Union
 
 
 class TBLogger():
@@ -54,14 +17,23 @@ class TBLogger():
 
 class BaseClass(ABC):
     
-    def __init__(self,CheckpointFile:str):
-        self.model = None
+    def __init__(self,model:nn.Module,CheckpointFile:str,debug:bool):
+        self.model = model
         self.lTrainScore = None
         self.lTrainLoss = None
         self.lValLoss = None
         self.lValScore = None
         self.lLearnRate = None
         self.CheckpointFile = CheckpointFile
+        self.debug = debug
+        ## overide print
+        global dprint
+        dprint = self._conditional_print
+
+    def _conditional_print(self, *args, **kwargs):
+        if self.debug:
+            msg = f"DEBUG:: " + " ".join(map(str, args))
+            print(msg, **kwargs)
 
     def plotTrainResults(self):
         hF, vHa = plt.subplots(nrows = 1, ncols = 3, figsize = (12, 5))
@@ -120,8 +92,9 @@ class BaseClass(ABC):
 
 class basicModel(BaseClass):
 
-    def __init__(self,CheckpointFile:str=None):
-        BaseClass.__init__(self,CheckpointFile)
+    def __init__(self,model:nn.Module, CheckpointFile:str=None,debug:bool=False):
+        BaseClass.__init__(self,model,CheckpointFile,debug)
+        dprint(f"basicModel::init end")
 
 
     def RunEpoch(self, oModel: nn.Module, dlData: DataLoader, hL: Callable, hS: Callable, oOpt: Optional[Optimizer] = None, opMode: NNMode = NNMode.TRAIN ) -> Tuple[float, float]:
@@ -145,7 +118,8 @@ class basicModel(BaseClass):
             It should return a scalar `valScore` of the score.
         - The optimizer is required for training mode.
         """
-        
+
+
         epochLoss   = 0.0
         epochScore  = 0.0
         numSamples  = 0
@@ -183,6 +157,8 @@ class basicModel(BaseClass):
                     valLoss = hL(mZ, vY) #<! Loss
 
             with torch.no_grad():
+                dprint(f'   mZ shape = {mZ.shape}')
+                dprint(f'   vY shape = {vY.shape}')
                 # Score
                 valScore = hS(mZ, vY)
                 # Normalize so each sample has the same weight
@@ -196,11 +172,49 @@ class basicModel(BaseClass):
                 
         return epochLoss / numSamples, epochScore / numSamples
 
-    def TrainModel(self, oModel: nn.Module, dlTrain: DataLoader, dlVal: DataLoader, oOpt: Optimizer, numEpoch: int, hL: Callable, hS: Callable, *, oSch: Optional[LRScheduler] = None, oTBWriter: Optional[SummaryWriter] = None) -> Tuple[nn.Module, List, List, List, List]:
+    def summary(self,train):
+        if not self.model:
+            raise ValueError(f'no AI model!')
+        tX, vY = next(iter(train)) #<! PyTorch Tensors
+        info = torchinfo.summary(self.model,input_size=tX.shape ,  device = 'cpu')
+        return info,tX,vY
+
+    def verify(self, dlTrain: DataLoader, dlVal: DataLoader, oOpt: Optimizer, numEpoch: int,batchSize: int, hL: Callable, hS: Callable, *, oSch: Optional[LRScheduler] = None, oTBWriter: Optional[SummaryWriter] = None):
+        
+        oModel = self.model
+        
+        layers = []
+        info,tX,vY = self.summary(dlTrain)
+        for layer in info.summary_list:
+            layers.append((layer.class_name, layer.output_size,layer.num_params))
+        
+        print('==========================================================================================')
+        print(f"numEpoch = {numEpoch} ; batchSize = {batchSize}")
+        print(f"Train: ")
+        print(f'    dlTrain: iter tX shape   = {tX.shape} ')
+        print(f'    dlTrain: tensor[0].shape = {dlTrain.dataset.tensors[0].shape}')
+        print(f'    dlTrain: iter vY ; shape = {vY.shape}')
+        print(f'    dlTrain: tensor[1].shape = {dlTrain.dataset.tensors[1].shape}')
+        print(f'    dlTrain: len = {len(dlTrain)}')
+        
+
+        last_layer_size_list = layers[-1][1]
+        vY_shape_list = list(vY.shape)
+        if last_layer_size_list != vY_shape_list:
+            raise ValueError(f"ERROR: last layer size {last_layer_size_list} != vY shape {vY_shape_list}")
+        else:
+            print(f"+++ last layer size {last_layer_size_list} == vY shape {vY_shape_list} ; PASS ")
+
+        print(f"Val: ")
+        print(f'    dlVal  : tensor[0].shape = {dlVal.dataset.tensors[0].shape}')
+        print(f'    dlVal  : tensor[1].shape = {dlVal.dataset.tensors[1].shape}')
+
+        print('==========================================================================================')
+
+    def TrainModel(self, dlTrain: DataLoader, dlVal: DataLoader, oOpt: Optimizer, numEpoch: int, hL: Callable, hS: Callable, *, oSch: Optional[LRScheduler] = None, oTBWriter: Optional[SummaryWriter] = None):
         """
         Trains a model given test and validation data loaders.  
         Input:
-            oModel      - PyTorch `nn.Module` object.
             dlTrain     - PyTorch `Dataloader` object (Training).
             dlVal       - PyTorch `Dataloader` object (Validation).
             oOpt        - PyTorch `Optimizer` object.
@@ -222,7 +236,12 @@ class basicModel(BaseClass):
         - The `hS` function should accept the `vY` (Reference target) and `mZ` (Output of the NN).  
             It should return a scalar `valScore` of the score.
         - The optimizer is required for training mode.
-        """
+        """    
+        oModel = self.model
+        dprint(f"===================================================================")
+        dprint(f"basicModel::TrainModel start")
+        
+
 
         lTrainLoss  = []
         lTrainScore = []
@@ -236,6 +255,10 @@ class basicModel(BaseClass):
         learnRate = oOpt.param_groups[0]['lr']
 
         for ii in range(numEpoch):
+
+            dprint(f"basicModel::TrainModel epoch {ii}...")
+
+
             startTime           = time.time()
             trainLoss, trainScr = self.RunEpoch(oModel, dlTrain, hL, hS, oOpt, opMode = NNMode.TRAIN) #<! Train
             valLoss,   valScr   = self.RunEpoch(oModel, dlVal, hL, hS, oOpt, opMode = NNMode.INFERENCE) #<! Score Validation
@@ -282,7 +305,6 @@ class basicModel(BaseClass):
         # Load best model ("Early Stopping")
         # dCheckPoint = torch.load('BestModel.pt')
         # oModel.load_state_dict(dCheckPoint['Model'])
-        self.model = oModel
         self.lTrainLoss = lTrainLoss
         self.lTrainScore = lTrainScore
         self.lValLoss = lValLoss
@@ -296,11 +318,15 @@ class basicModel(BaseClass):
 
 class schModel(BaseClass):
     
-    def __init__(self,CheckpointFile:str=None):
-        BaseClass.__init__(self,CheckpointFile)
+    def __init__(self,model:nn.Module, CheckpointFile:str=None,debug:bool=False):
+        BaseClass.__init__(self,model,CheckpointFile,debug)
+        dprint(f"schModel::init end")
 
+    def validCheck(self, dlTrain: DataLoader, dlVal: DataLoader, oOpt: Optimizer, numEpoch: int,batchSize: int, hL: Callable, hS: Callable, *, oSch: Optional[LRScheduler] = None, oTBWriter: Optional[SummaryWriter] = None):
+        pass
+    
 
-    def RunEpoch( oModel: nn.Module, dlData: DataLoader, hL: Callable, hS: Callable, oOpt: Optional[Optimizer] = None, oSch: Optional[LRScheduler] = None, opMode: NNMode = NNMode.TRAIN, oTBLogger: Optional[TBLogger] = None ) -> Tuple[float, float]:
+    def RunEpoch( self, dlData: DataLoader, hL: Callable, hS: Callable, oOpt: Optional[Optimizer] = None, oSch: Optional[LRScheduler] = None, opMode: NNMode = NNMode.TRAIN, oTBLogger: Optional[TBLogger] = None ) -> Tuple[float, float]:
         """
         Runs a single Epoch (Train / Test) of a model.  
         Supports per iteration (Batch) scheduling. 
@@ -325,7 +351,7 @@ class schModel(BaseClass):
             It should return a scalar `valScore` of the score.
         - The optimizer / scheduler are required for training mode.
         """
-        
+        oModel = self.model
         epochLoss   = 0.0
         epochScore  = 0.0
         numSamples  = 0
@@ -394,8 +420,8 @@ class schModel(BaseClass):
         return epochLoss / numSamples, epochScore / numSamples, epochLr / numSamples, lLearnRate
 
 
-    def TrainModelSch(self, oModel: nn.Module, dlTrain: DataLoader, dlVal: DataLoader, oOpt: Optimizer, oSch: LRScheduler, numEpoch: int, hL: Callable, hS: Callable, oTBLogger: Optional[TBLogger] = None ) -> Tuple[nn.Module, List, List, List, List]:
-
+    def TrainModelSch(self, dlTrain: DataLoader, dlVal: DataLoader, oOpt: Optimizer, oSch: LRScheduler, numEpoch: int, hL: Callable, hS: Callable, oTBLogger: Optional[TBLogger] = None ) -> Tuple[nn.Module, List, List, List, List]:
+        oModel = self.model
         lTrainLoss  = []
         lTrainScore = []
         lValLoss    = []
@@ -448,8 +474,13 @@ class schModel(BaseClass):
         dCheckpoint = torch.load('BestModel.pt')
         oModel.load_state_dict(dCheckpoint['Model'])
 
-        return oModel, lTrainLoss, lTrainScore, lValLoss, lValScore, lLearnRate
+        self.lTrainLoss = lTrainLoss
+        self.lTrainScore = lTrainScore
+        self.lValLoss = lValLoss
+        self.lValScore = lValScore
+        self.lLearnRate = lLearnRate
 
+        return self
 
 
         
