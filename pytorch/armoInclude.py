@@ -17,6 +17,9 @@ import numpy as np
 import scipy as sp
 import pandas as pd
 
+from PIL import Image
+
+
 # Machine Learning
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from sklearn.model_selection import ParameterGrid
@@ -34,6 +37,7 @@ import  torch.nn.functional as F
 from    torch.optim.optimizer import Optimizer
 from    torch.optim.lr_scheduler import LRScheduler
 from    torch.utils.data import DataLoader
+from    torch.utils.data import Dataset, DataLoader
 from    torch.utils.tensorboard import SummaryWriter
 
 from    torchmetrics.classification import MulticlassAccuracy
@@ -57,7 +61,8 @@ import seaborn as sns
 
 # Jupyter
 from IPython import get_ipython
-from IPython.display import HTML, Image
+from IPython.display import HTML
+from IPython.display import Image as IPImage
 from IPython.display import display
 from ipywidgets import Dropdown, FloatSlider, interact, IntSlider, Layout, SelectionSlider
 from ipywidgets import interact

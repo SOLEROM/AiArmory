@@ -90,6 +90,21 @@ class BaseClass(ABC):
             print(f" armoTrain::inference  FAILED to get output")
         return output
 
+
+    def parma_stat(self):
+        total_params = sum(p.numel() for p in self.model.parameters())
+        trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        size_of_each_param_in_bytes=4
+        total_size_in_bytes=total_params * size_of_each_param_in_bytes
+        total_size_in_megabytes = total_size_in_bytes / (1024*1024)
+        ## print
+        dprint(f"total_size_in_megabytes = {total_size_in_megabytes}")
+        dprint(f"Total parameters: {total_params}")
+        dprint(f"Trainable parameters: {trainable_params}")
+        ## return
+        return {'total_params':total_params,'trainable_params':trainable_params,'total_size_in_megabytes':total_size_in_megabytes}
+
+
 class basicModel(BaseClass):
 
     def __init__(self,model:nn.Module, CheckpointFile:str=None,debug:bool=False):
@@ -177,39 +192,61 @@ class basicModel(BaseClass):
             raise ValueError(f'no AI model!')
         tX, vY = next(iter(train)) #<! PyTorch Tensors
         info = torchinfo.summary(self.model,input_size=tX.shape ,  device = 'cpu')
-        return info,tX,vY
+        
+        return info
+
 
     def verify(self, dlTrain: DataLoader, dlVal: DataLoader, oOpt: Optimizer, numEpoch: int,batchSize: int, hL: Callable, hS: Callable, *, oSch: Optional[LRScheduler] = None, oTBWriter: Optional[SummaryWriter] = None):
         
         oModel = self.model
         
+        tX, vY = next(iter(dlTrain)) #<! PyTorch Tensors
+        print('=======================  info   =========================================================')
+        print(f"numEpoch = {numEpoch} ; batchSize = {batchSize}")
+        print(f"Train: ")
+        print(f'    len train dataset {len(dlTrain.dataset)} / batchSize  {batchSize} = len Train {len(dlTrain)} ')
+        print(f'    dlTrain: iter tX shape   = {tX.shape} ')
+        print(f'    dlTrain: iter vY ; shape = {vY.shape}')
+
+        valNext = next(iter(dlVal))
+        print(f"Val: ")
+        print(f'    dlVal  : tensor[0].shape = {valNext[0].shape}')
+        print(f'    dlVal  : tensor[1].shape = {valNext[1].shape}')
+        
+        print('=======================  summary   =========================================================')
         layers = []
-        info,tX,vY = self.summary(dlTrain)
+        info = torchinfo.summary(self.model,input_size=tX.shape ,  device = 'cpu')
+        print(info)
+        
+        print('=======================  verify   =========================================================')
         for layer in info.summary_list:
             layers.append((layer.class_name, layer.output_size,layer.num_params))
         
-        print('==========================================================================================')
-        print(f"numEpoch = {numEpoch} ; batchSize = {batchSize}")
-        print(f"Train: ")
-        print(f'    dlTrain: iter tX shape   = {tX.shape} ')
-        print(f'    dlTrain: tensor[0].shape = {dlTrain.dataset.tensors[0].shape}')
-        print(f'    dlTrain: iter vY ; shape = {vY.shape}')
-        print(f'    dlTrain: tensor[1].shape = {dlTrain.dataset.tensors[1].shape}')
-        print(f'    dlTrain: len = {len(dlTrain)}')
-        
-
         last_layer_size_list = layers[-1][1]
         vY_shape_list = list(vY.shape)
         if last_layer_size_list != vY_shape_list:
-            raise ValueError(f"ERROR: last layer size {last_layer_size_list} != vY shape {vY_shape_list}")
+            print(f"ERROR: last layer size {last_layer_size_list} != vY shape {vY_shape_list} ; FAIL " )
         else:
             print(f"+++ last layer size {last_layer_size_list} == vY shape {vY_shape_list} ; PASS ")
 
-        print(f"Val: ")
-        print(f'    dlVal  : tensor[0].shape = {dlVal.dataset.tensors[0].shape}')
-        print(f'    dlVal  : tensor[1].shape = {dlVal.dataset.tensors[1].shape}')
-
         print('==========================================================================================')
+
+    def loadModel(self,checkpointFile):
+        if not self.model:
+            raise ValueError(f'no AI model!')
+        try:
+            load_obj = torch.load(checkpointFile)
+            self.model.load_state_dict(load_obj['Model'])
+            self.lTrainLoss = load_obj['lTrainLoss']
+            self.lTrainScore = load_obj['lTrainScore']
+            self.lValLoss = load_obj['lValLoss']
+            self.lValScore = load_obj['lValScore']
+            self.lLearnRate = load_obj['lLearnRate']
+            print(f'model loaded from {checkpointFile}')
+        except:
+            print(f"loadModel:: failed to load model from {checkpointFile}")
+        return self
+
 
     def TrainModel(self, dlTrain: DataLoader, dlVal: DataLoader, oOpt: Optimizer, numEpoch: int, hL: Callable, hS: Callable, *, oSch: Optional[LRScheduler] = None, oTBWriter: Optional[SummaryWriter] = None):
         """
@@ -292,18 +329,25 @@ class basicModel(BaseClass):
             if valScr > bestScore:
                 bestScore = valScr
                 try:
-                    dCheckPoint = {'Model': oModel.state_dict(), 'Optimizer': oOpt.state_dict()}
+                    dCheckPoint = { 'Model': oModel.state_dict(),
+                                    'Optimizer': oOpt.state_dict(),
+                                    'lTrainLoss': lTrainLoss,
+                                    'lTrainScore': lTrainScore,
+                                    'lValLoss': lValLoss,
+                                    'lValScore': lValScore,
+                                    'lLearnRate': lLearnRate
+                                }   
                     if oSch is not None:
                         dCheckPoint['Scheduler'] = oSch.state_dict()
                     if self.CheckpointFile:
-                        torch.save(dCheckPoint, 'BestModel.pt')
+                        torch.save(dCheckPoint, self.CheckpointFile)
                         print(' | <-- Checkpoint Saved!', end = '')
                 except:
                     print(' | <-- Failed!', end = '')
             print(' |')
         
         # Load best model ("Early Stopping")
-        # dCheckPoint = torch.load('BestModel.pt')
+        # dCheckPoint = torch.load(self.CheckpointFile)
         # oModel.load_state_dict(dCheckPoint['Model'])
         self.lTrainLoss = lTrainLoss
         self.lTrainScore = lTrainScore
