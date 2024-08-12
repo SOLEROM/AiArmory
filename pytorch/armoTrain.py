@@ -62,20 +62,20 @@ class BaseClass(ABC):
         hA.set_ylabel('Learn Rate')
 
 
-    def evaluate_test_data(self,testData, loss_fn):
+    def evaluate_test_data(self,testData, score_fn):
         if not self.model:
             raise ValueError(f'no AI model!')
 
         self.model.eval()
-        test_loss = 0
+        test_score = 0
         with torch.no_grad():
             for batch in testData:
                 inputs, targets = batch
                 outputs = self.model(inputs)
-                test_loss += loss_fn(outputs, targets).item()
-        avg_test_loss = test_loss / len(testData)
-        print(f"Test Loss: {avg_test_loss}")
-        return avg_test_loss
+                test_score += score_fn(outputs, targets).item()
+        avg_test_score = test_score / len(testData)
+        print(f"Test Score: {avg_test_score}")
+        return avg_test_score
 
 
     def inference(self,input):
